@@ -6,7 +6,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 
-<title>Edge文本朗读器</title>
+<title>Edge长文本朗读器</title>
 
 <style>
 
@@ -19,52 +19,75 @@ html,body{
 body{
     display:flex;
     flex-direction:column;
+    font-family:"Microsoft YaHei";
 }
+
 
 textarea{
+
     flex:1;
     width:100%;
-    resize:none;
-    border:none;
-    outline:none;
     padding:15px;
     box-sizing:border-box;
+
+    border:none;
+    outline:none;
+
+    resize:none;
+
     font-size:18px;
     line-height:1.8;
+
 }
+
+
+.status{
+
+    height:35px;
+    line-height:35px;
+
+    text-align:center;
+
+    font-size:14px;
+
+    color:#666;
+
+    background:#fafafa;
+
+}
+
 
 .controls{
+
     display:flex;
+
     flex-wrap:wrap;
-    background:#f5f5f5;
-    padding:5px;
+
+    background:#f3f3f3;
+
 }
 
-button,
-select{
+
+button,select{
 
     height:45px;
+
+    margin:4px;
+
     font-size:16px;
-    margin:3px;
 
 }
+
 
 button{
 
     flex:1;
+
     min-width:80px;
 
 }
 
-#status{
 
-    text-align:center;
-    height:30px;
-    line-height:30px;
-    font-size:14px;
-    color:#666;
-
-}
 
 </style>
 
@@ -75,38 +98,41 @@ button{
 
 
 <textarea id="editor"
-placeholder="请输入需要朗读的文字"></textarea>
+placeholder="输入需要朗读的文章"></textarea>
 
 
-<div id="status">
+
+<div class="status" id="status">
 准备就绪
 </div>
 
 
+
 <div class="controls">
 
-<button onclick="speakText()">
+
+<button onclick="startRead()">
 朗读
 </button>
+
 
 <button onclick="pauseResume()">
 暂停/继续
 </button>
 
-<button onclick="stopSpeech()">
+
+<button onclick="stopRead()">
 停止
 </button>
 
-<button onclick="copyText()">
-复制
+
+<button onclick="prevChunk()">
+上一段
 </button>
 
-<button onclick="formatText()">
-整理
-</button>
 
-<button onclick="clearText()">
-清空
+<button onclick="nextChunk()">
+下一段
 </button>
 
 
@@ -131,6 +157,27 @@ placeholder="请输入需要朗读的文字"></textarea>
 </select>
 
 
+<button onclick="copyText()">
+复制
+</button>
+
+
+<button onclick="formatText()">
+整理
+</button>
+
+
+<button onclick="pasteText()">
+粘贴
+</button>
+
+
+<button onclick="clearText()">
+清空
+</button>
+
+
+
 </div>
 
 
@@ -138,62 +185,91 @@ placeholder="请输入需要朗读的文字"></textarea>
 <script>
 
 
-let speaking=false;
+let chunks=[];
+
+let currentIndex=0;
+
+let reading=false;
 
 let paused=false;
 
+let currentUtterance=null;
 
 
-// 复制
 
-function copyText(){
+// ======================
+// 文本拆分
+// ======================
 
-    navigator.clipboard.writeText(
-        document.getElementById("editor").value
+
+function splitText(text){
+
+
+    let sentences =
+    text.match(
+        /[^。！？!?；;]+[。！？!?；;]?/g
     );
 
+
+    if(!sentences)
+        return [text];
+
+
+    let result=[];
+
+    let temp="";
+
+
+    sentences.forEach(sentence=>{
+
+
+        sentence=sentence.trim();
+
+
+        if(
+            temp.length+sentence.length
+            <=160
+        ){
+
+            temp+=sentence;
+
+        }
+        else{
+
+
+            if(temp)
+                result.push(temp);
+
+
+            temp=sentence;
+
+
+        }
+
+
+    });
+
+
+
+    if(temp)
+        result.push(temp);
+
+
+
+    return result;
+
 }
 
 
 
-// 整理文字
-
-function formatText(){
-
-    let editor=
-    document.getElementById("editor");
 
 
-    editor.value=
-    editor.value.replace(
-        /[\s\u00A0\u3000]+/g,
-        ""
-    );
-
-}
+// ======================
+// 获取微软中文声音
+// ======================
 
 
-
-// 清空
-
-function clearText(){
-
-    stopSpeech();
-
-    document.getElementById("editor")
-    .value="";
-
-
-    updateStatus("准备就绪");
-
-}
-
-
-
-
-// 获取Edge中文声音
-
-function getChineseVoice(){
+function getVoice(){
 
 
     let voices=
@@ -203,12 +279,12 @@ function getChineseVoice(){
 
     return voices.find(v=>
 
-        v.name.includes("Xiaoxiao")||
-
-        v.name.includes("晓晓")||
-
-        v.name.includes("Yunxi")||
-
+        v.name.includes("Xiaoxiao")
+        ||
+        v.name.includes("晓晓")
+        ||
+        v.name.includes("Yunxi")
+        ||
         v.name.includes("云希")
 
     )
@@ -227,9 +303,13 @@ function getChineseVoice(){
 
 
 
-// 开始朗读
 
-function speakText(){
+// ======================
+// 开始朗读
+// ======================
+
+
+function startRead(){
 
 
     let text=
@@ -237,9 +317,60 @@ function speakText(){
     .value.trim();
 
 
-    if(!text){
 
-        updateStatus("没有内容");
+    if(!text)
+        return;
+
+
+
+    stopRead();
+
+
+
+    chunks=
+    splitText(text);
+
+
+
+    currentIndex=0;
+
+
+    reading=true;
+
+
+    readCurrent();
+
+
+
+}
+
+
+
+
+
+// ======================
+// 朗读当前段
+// ======================
+
+
+function readCurrent(){
+
+
+    if(!reading)
+        return;
+
+
+
+    if(currentIndex>=chunks.length){
+
+
+        updateStatus(
+            "朗读完成"
+        );
+
+
+        reading=false;
+
 
         return;
 
@@ -251,74 +382,83 @@ function speakText(){
 
 
 
-    let utterance=
-    new SpeechSynthesisUtterance(text);
+    currentUtterance=
+    new SpeechSynthesisUtterance(
+        chunks[currentIndex]
+    );
 
 
 
-    utterance.lang="zh-CN";
+    currentUtterance.lang="zh-CN";
 
 
-    utterance.rate=
+    currentUtterance.rate=
     Number(
         document.getElementById("rate")
         .value
     );
 
 
-    utterance.pitch=1;
+
+    let voice=getVoice();
 
 
 
-    let voice=
-    getChineseVoice();
+    if(voice)
+        currentUtterance.voice=voice;
 
 
 
-    if(voice){
+    updateStatus(
+        "正在朗读 第 "
+        +(currentIndex+1)
+        +" / "
+        +chunks.length
+        +" 段"
+    );
 
-        utterance.voice=voice;
-
-    }
 
 
 
-    utterance.onstart=function(){
+    currentUtterance.onend=function(){
 
-        speaking=true;
 
-        paused=false;
+        if(!reading)
+            return;
 
-        updateStatus("正在朗读");
+
+        if(!paused){
+
+
+            currentIndex++;
+
+
+            setTimeout(
+                readCurrent,
+                100
+            );
+
+
+        }
+
 
     };
 
 
 
-    utterance.onend=function(){
 
-        speaking=false;
+    currentUtterance.onerror=function(){
 
-        paused=false;
-
-        updateStatus("朗读完成");
-
-    };
-
-
-
-    utterance.onerror=function(){
-
-        speaking=false;
-
-        updateStatus("朗读错误");
+        updateStatus(
+            "语音任务中断"
+        );
 
     };
 
 
 
     speechSynthesis.speak(
-        utterance
+        currentUtterance
     );
 
 }
@@ -326,12 +466,17 @@ function speakText(){
 
 
 
-// 暂停 / 继续
+
+// ======================
+// 暂停继续
+// ======================
+
 
 function pauseResume(){
 
 
-    if(!speaking)
+
+    if(!reading)
         return;
 
 
@@ -339,26 +484,56 @@ function pauseResume(){
     if(paused){
 
 
-        speechSynthesis.resume();
 
         paused=false;
 
-        updateStatus("继续朗读");
+
+
+        /*
+        如果 Edge 已经释放任务，
+        resume 无效时重新读取当前段
+        */
+
+        if(
+            speechSynthesis.paused
+        ){
+
+            speechSynthesis.resume();
+
+        }
+        else{
+
+            readCurrent();
+
+        }
+
+
+
+        updateStatus(
+            "继续朗读"
+        );
 
 
     }
-
     else{
+
+
+        paused=true;
 
 
         speechSynthesis.pause();
 
-        paused=true;
 
-        updateStatus("已暂停");
+
+        updateStatus(
+            "已暂停 第 "
+            +(currentIndex+1)
+            +" 段"
+        );
 
 
     }
+
 
 
 }
@@ -366,24 +541,103 @@ function pauseResume(){
 
 
 
-// 停止
 
-function stopSpeech(){
+// ======================
+// 停止
+// ======================
+
+
+function stopRead(){
 
 
     speechSynthesis.cancel();
 
 
-    speaking=false;
+    reading=false;
 
     paused=false;
 
 
-    updateStatus("已停止");
+    currentUtterance=null;
 
 
 }
 
+
+
+
+
+// ======================
+// 上一段
+// ======================
+
+
+function prevChunk(){
+
+
+    if(chunks.length===0)
+        return;
+
+
+
+    if(currentIndex>0)
+        currentIndex--;
+
+
+
+    reading=true;
+
+    paused=false;
+
+
+    readCurrent();
+
+
+}
+
+
+
+
+
+// ======================
+// 下一段
+// ======================
+
+
+function nextChunk(){
+
+
+    if(chunks.length===0)
+        return;
+
+
+
+    if(
+        currentIndex<
+        chunks.length-1
+    )
+        currentIndex++;
+
+
+
+    reading=true;
+
+    paused=false;
+
+
+    readCurrent();
+
+
+
+}
+
+
+
+
+
+// ======================
+// 工具
+// ======================
 
 
 
@@ -397,6 +651,93 @@ function updateStatus(text){
 
 
 
+function copyText(){
+
+
+    navigator.clipboard.writeText(
+
+        document.getElementById("editor")
+        .value
+
+    );
+
+
+}
+
+
+
+
+async function pasteText(){
+
+
+    try{
+
+
+        let text=
+        await navigator.clipboard.readText();
+
+
+
+        document.getElementById("editor")
+        .value+=text;
+
+
+
+    }
+    catch(e){
+
+        alert(
+            "无法读取剪贴板"
+        );
+
+    }
+
+
+}
+
+
+
+
+
+function formatText(){
+
+
+    let editor=
+    document.getElementById("editor");
+
+
+    editor.value=
+    editor.value.replace(
+        /[\s\u00A0\u3000]+/g,
+        ""
+    );
+
+}
+
+
+
+
+
+function clearText(){
+
+
+    stopRead();
+
+
+    document.getElementById("editor")
+    .value="";
+
+
+    updateStatus(
+        "准备就绪"
+    );
+
+
+}
+
+
+
+
 speechSynthesis.onvoiceschanged=function(){
 
     speechSynthesis.getVoices();
@@ -404,7 +745,9 @@ speechSynthesis.onvoiceschanged=function(){
 };
 
 
+
 speechSynthesis.getVoices();
+
 
 
 </script>
