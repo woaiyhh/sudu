@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<title>Edge智能朗读器</title>
+
+<style>
+
+html,body{
+    margin:0;
+    height:100%;
+}
+
+body{
+    display:flex;
+    flex-direction:column;
+    font-family:"Microsoft YaHei";
+}
+
+textarea{
+    flex:1;
+    resize:none;
+    border:none;
+    outline:none;
+    padding:15px;
+    font-size:18px;
+    line-height:1.8;
+}
+
+.panel{
+    padding:10px;
+    background:#f5f5f5;
+}
+
+button,
+select{
+    height:45px;
+    font-size:16px;
+    margin:3px;
+}
+
+button{
+    min-width:80px;
+}
+
+#status{
+    text-align:center;
+    color:#666;
+    font-size:14px;
+    padding:5px;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<textarea id="text"
+placeholder="输入需要朗读的文字"></textarea>
+
+
+<div id="status">
+准备就绪
+</div>
+
+
+<div class="panel">
+
+
+<button onclick="startRead()">
+开始朗读
+</button>
+
+
+<button onclick="pauseRead()">
+暂停/继续
+</button>
+
+
+<button onclick="stopRead()">
+停止
+</button>
+
+
+<select id="rate">
+
+<option value="0.7">
+0.7倍速
+</option>
+
+<option value="1" selected>
+1倍速
+</option>
+
+<option value="1.2">
+1.2倍速
+</option>
+
+<option value="1.5">
+1.5倍速
+</option>
+
+</select>
+
+
+</div>
+
+
+<script>
+
+
+let chunks=[];
+
+let index=0;
+
+let paused=false;
+
+let reading=false;
+
+
+
+// 分割文字
+
+function splitText(text){
+
+    let arr =
+    text.match(
+        /[^。！？!?；;]+[。！？!?；;]?/g
+    );
+
+    if(!arr)
+        return [text];
+
+
+    let result=[];
+
+    let temp="";
+
+
+    arr.forEach(s=>{
+
+        if(
+            temp.length+s.length<120
+        ){
+
+            temp+=s;
+
+        }else{
+
+            result.push(temp);
+
+            temp=s;
+
+        }
+
+    });
+
+
+    if(temp)
+        result.push(temp);
+
+
+    return result;
+
+}
+
+
+
+
+// 获取Edge中文声音
+
+function getVoice(){
+
+
+    let voices=
+    speechSynthesis.getVoices();
+
+
+    return voices.find(v=>
+
+        v.name.includes("Xiaoxiao")||
+
+        v.name.includes("晓晓")||
+
+        v.name.includes("Yunxi")||
+
+        v.name.includes("云希")
+
+    )
+
+    ||
+
+    voices.find(v=>
+        v.lang==="zh-CN"
+    );
+
+
+}
+
+
+
+
+
+function startRead(){
+
+
+    let text=
+    document.getElementById("text")
+    .value.trim();
+
+
+    if(!text)
+        return;
+
+
+    speechSynthesis.cancel();
+
+
+    chunks=
+    splitText(text);
+
+
+    index=0;
+
+    paused=false;
+
+    reading=true;
+
+
+    readNext();
+
+
+}
+
+
+
+
+
+function readNext(){
+
+
+    if(!reading)
+        return;
+
+
+
+    if(index>=chunks.length){
+
+
+        document.getElementById("status")
+        .innerHTML="朗读完成";
+
+
+        reading=false;
+
+        return;
+
+    }
+
+
+
+    let u=
+    new SpeechSynthesisUtterance(
+        chunks[index]
+    );
+
+
+    u.lang="zh-CN";
+
+
+    u.rate=
+    Number(
+        document.getElementById("rate")
+        .value
+    );
+
+
+
+    let voice=getVoice();
+
+
+    if(voice)
+        u.voice=voice;
+
+
+
+
+    document.getElementById("status")
+    .innerHTML=
+
+    "正在朗读 "
+    +(index+1)
+    +"/"
+    +chunks.length;
+
+
+
+
+    u.onend=function(){
+
+
+        if(reading && !paused){
+
+            index++;
+
+            setTimeout(
+                readNext,
+                100
+            );
+
+        }
+
+
+    };
+
+
+
+    speechSynthesis.speak(u);
+
+
+}
+
+
+
+
+
+function pauseRead(){
+
+
+    if(!reading)
+        return;
+
+
+
+    if(paused){
+
+
+        paused=false;
+
+
+        speechSynthesis.resume();
+
+
+        document.getElementById("status")
+        .innerHTML="继续朗读";
+
+
+    }
+
+    else{
+
+
+        paused=true;
+
+
+        speechSynthesis.pause();
+
+
+        document.getElementById("status")
+        .innerHTML="已暂停";
+
+
+    }
+
+
+}
+
+
+
+
+
+function stopRead(){
+
+
+    reading=false;
+
+    paused=false;
+
+    index=0;
+
+    chunks=[];
+
+
+    speechSynthesis.cancel();
+
+
+    document.getElementById("status")
+    .innerHTML="已停止";
+
+
+}
+
+
+
+
+speechSynthesis.onvoiceschanged=function(){
+
+    speechSynthesis.getVoices();
+
+};
+
+
+</script>
+
+
+</body>
+
+</html>
