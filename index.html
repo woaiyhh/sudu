@@ -755,4 +755,665 @@ speechSynthesis.getVoices();
 
 </body>
 
+</html><body>
+
+
+<textarea id="editor"
+placeholder="输入需要朗读的文章"></textarea>
+
+
+
+<div class="status" id="status">
+准备就绪
+</div>
+
+
+
+<div class="controls">
+
+
+<button onclick="startRead()">
+朗读
+</button>
+
+
+<button onclick="pauseResume()">
+暂停/继续
+</button>
+
+
+<button onclick="stopRead()">
+停止
+</button>
+
+
+<button onclick="prevChunk()">
+上一段
+</button>
+
+
+<button onclick="nextChunk()">
+下一段
+</button>
+
+
+<select id="rate">
+
+<option value="0.7">
+0.7倍速
+</option>
+
+<option value="1" selected>
+1倍速
+</option>
+
+<option value="1.2">
+1.2倍速
+</option>
+
+<option value="1.5">
+1.5倍速
+</option>
+
+</select>
+
+
+<button onclick="copyText()">
+复制
+</button>
+
+
+<button onclick="formatText()">
+整理
+</button>
+
+
+<button onclick="pasteText()">
+粘贴
+</button>
+
+
+<button onclick="clearText()">
+清空
+</button>
+
+
+
+</div>
+
+
+
+<script>
+
+
+let chunks=[];
+
+let currentIndex=0;
+
+let reading=false;
+
+let paused=false;
+
+let currentUtterance=null;
+
+
+
+// ======================
+// 文本拆分
+// ======================
+
+
+function splitText(text){
+
+
+    let sentences =
+    text.match(
+        /[^。！？!?；;]+[。！？!?；;]?/g
+    );
+
+
+    if(!sentences)
+        return [text];
+
+
+    let result=[];
+
+    let temp="";
+
+
+    sentences.forEach(sentence=>{
+
+
+        sentence=sentence.trim();
+
+
+        if(
+            temp.length+sentence.length
+            <=160
+        ){
+
+            temp+=sentence;
+
+        }
+        else{
+
+
+            if(temp)
+                result.push(temp);
+
+
+            temp=sentence;
+
+
+        }
+
+
+    });
+
+
+
+    if(temp)
+        result.push(temp);
+
+
+
+    return result;
+
+}
+
+
+
+
+
+// ======================
+// 获取微软中文声音
+// ======================
+
+
+function getVoice(){
+
+
+    let voices=
+    speechSynthesis.getVoices();
+
+
+
+    return voices.find(v=>
+
+        v.name.includes("Xiaoxiao")
+        ||
+        v.name.includes("晓晓")
+        ||
+        v.name.includes("Yunxi")
+        ||
+        v.name.includes("云希")
+
+    )
+
+    ||
+
+    voices.find(v=>
+
+        v.lang==="zh-CN"
+
+    );
+
+
+}
+
+
+
+
+
+// ======================
+// 开始朗读
+// ======================
+
+
+function startRead(){
+
+
+    let text=
+    document.getElementById("editor")
+    .value.trim();
+
+
+
+    if(!text)
+        return;
+
+
+
+    stopRead();
+
+
+
+    chunks=
+    splitText(text);
+
+
+
+    currentIndex=0;
+
+
+    reading=true;
+
+
+    readCurrent();
+
+
+
+}
+
+
+
+
+
+// ======================
+// 朗读当前段
+// ======================
+
+
+function readCurrent(){
+
+
+    if(!reading)
+        return;
+
+
+
+    if(currentIndex>=chunks.length){
+
+
+        updateStatus(
+            "朗读完成"
+        );
+
+
+        reading=false;
+
+
+        return;
+
+    }
+
+
+
+    speechSynthesis.cancel();
+
+
+
+    currentUtterance=
+    new SpeechSynthesisUtterance(
+        chunks[currentIndex]
+    );
+
+
+
+    currentUtterance.lang="zh-CN";
+
+
+    currentUtterance.rate=
+    Number(
+        document.getElementById("rate")
+        .value
+    );
+
+
+
+    let voice=getVoice();
+
+
+
+    if(voice)
+        currentUtterance.voice=voice;
+
+
+
+    updateStatus(
+        "正在朗读 第 "
+        +(currentIndex+1)
+        +" / "
+        +chunks.length
+        +" 段"
+    );
+
+
+
+
+    currentUtterance.onend=function(){
+
+
+        if(!reading)
+            return;
+
+
+        if(!paused){
+
+
+            currentIndex++;
+
+
+            setTimeout(
+                readCurrent,
+                100
+            );
+
+
+        }
+
+
+    };
+
+
+
+
+    currentUtterance.onerror=function(){
+
+        updateStatus(
+            "语音任务中断"
+        );
+
+    };
+
+
+
+    speechSynthesis.speak(
+        currentUtterance
+    );
+
+}
+
+
+
+
+
+// ======================
+// 暂停继续
+// ======================
+
+
+function pauseResume(){
+
+
+
+    if(!reading)
+        return;
+
+
+
+    if(paused){
+
+
+
+        paused=false;
+
+
+
+        /*
+        如果 Edge 已经释放任务，
+        resume 无效时重新读取当前段
+        */
+
+        if(
+            speechSynthesis.paused
+        ){
+
+            speechSynthesis.resume();
+
+        }
+        else{
+
+            readCurrent();
+
+        }
+
+
+
+        updateStatus(
+            "继续朗读"
+        );
+
+
+    }
+    else{
+
+
+        paused=true;
+
+
+        speechSynthesis.pause();
+
+
+
+        updateStatus(
+            "已暂停 第 "
+            +(currentIndex+1)
+            +" 段"
+        );
+
+
+    }
+
+
+
+}
+
+
+
+
+
+// ======================
+// 停止
+// ======================
+
+
+function stopRead(){
+
+
+    speechSynthesis.cancel();
+
+
+    reading=false;
+
+    paused=false;
+
+
+    currentUtterance=null;
+
+
+}
+
+
+
+
+
+// ======================
+// 上一段
+// ======================
+
+
+function prevChunk(){
+
+
+    if(chunks.length===0)
+        return;
+
+
+
+    if(currentIndex>0)
+        currentIndex--;
+
+
+
+    reading=true;
+
+    paused=false;
+
+
+    readCurrent();
+
+
+}
+
+
+
+
+
+// ======================
+// 下一段
+// ======================
+
+
+function nextChunk(){
+
+
+    if(chunks.length===0)
+        return;
+
+
+
+    if(
+        currentIndex<
+        chunks.length-1
+    )
+        currentIndex++;
+
+
+
+    reading=true;
+
+    paused=false;
+
+
+    readCurrent();
+
+
+
+}
+
+
+
+
+
+// ======================
+// 工具
+// ======================
+
+
+
+function updateStatus(text){
+
+    document.getElementById("status")
+    .innerText=text;
+
+}
+
+
+
+
+function copyText(){
+
+
+    navigator.clipboard.writeText(
+
+        document.getElementById("editor")
+        .value
+
+    );
+
+
+}
+
+
+
+
+async function pasteText(){
+
+
+    try{
+
+
+        let text=
+        await navigator.clipboard.readText();
+
+
+
+        document.getElementById("editor")
+        .value+=text;
+
+
+
+    }
+    catch(e){
+
+        alert(
+            "无法读取剪贴板"
+        );
+
+    }
+
+
+}
+
+
+
+
+
+function formatText(){
+
+
+    let editor=
+    document.getElementById("editor");
+
+
+    editor.value=
+    editor.value.replace(
+        /[\s\u00A0\u3000]+/g,
+        ""
+    );
+
+}
+
+
+
+
+
+function clearText(){
+
+
+    stopRead();
+
+
+    document.getElementById("editor")
+    .value="";
+
+
+    updateStatus(
+        "准备就绪"
+    );
+
+
+}
+
+
+
+
+speechSynthesis.onvoiceschanged=function(){
+
+    speechSynthesis.getVoices();
+
+};
+
+
+
+speechSynthesis.getVoices();
+
+
+
+</script>
+
+
+</body>
+
 </html>
