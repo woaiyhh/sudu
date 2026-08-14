@@ -6,13 +6,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 
-<title>Edge长文本朗读器</title>
+<title>Edge智能朗读器</title>
 
 <style>
 
 html,body{
     margin:0;
-    padding:0;
     height:100%;
 }
 
@@ -22,72 +21,38 @@ body{
     font-family:"Microsoft YaHei";
 }
 
-
 textarea{
-
     flex:1;
-    width:100%;
-    padding:15px;
-    box-sizing:border-box;
-
+    resize:none;
     border:none;
     outline:none;
-
-    resize:none;
-
+    padding:15px;
     font-size:18px;
     line-height:1.8;
-
 }
 
-
-.status{
-
-    height:35px;
-    line-height:35px;
-
-    text-align:center;
-
-    font-size:14px;
-
-    color:#666;
-
-    background:#fafafa;
-
+.panel{
+    padding:10px;
+    background:#f5f5f5;
 }
 
-
-.controls{
-
-    display:flex;
-
-    flex-wrap:wrap;
-
-    background:#f3f3f3;
-
-}
-
-
-button,select{
-
+button,
+select{
     height:45px;
-
-    margin:4px;
-
     font-size:16px;
-
+    margin:3px;
 }
-
 
 button{
-
-    flex:1;
-
     min-width:80px;
-
 }
 
-
+#status{
+    text-align:center;
+    color:#666;
+    font-size:14px;
+    padding:5px;
+}
 
 </style>
 
@@ -97,42 +62,30 @@ button{
 <body>
 
 
-<textarea id="editor"
-placeholder="输入需要朗读的文章"></textarea>
+<textarea id="text"
+placeholder="输入需要朗读的文字"></textarea>
 
 
-
-<div class="status" id="status">
+<div id="status">
 准备就绪
 </div>
 
 
-
-<div class="controls">
+<div class="panel">
 
 
 <button onclick="startRead()">
-朗读
+开始朗读
 </button>
 
 
-<button onclick="pauseResume()">
+<button onclick="pauseRead()">
 暂停/继续
 </button>
 
 
 <button onclick="stopRead()">
 停止
-</button>
-
-
-<button onclick="prevChunk()">
-上一段
-</button>
-
-
-<button onclick="nextChunk()">
-下一段
 </button>
 
 
@@ -157,29 +110,7 @@ placeholder="输入需要朗读的文章"></textarea>
 </select>
 
 
-<button onclick="copyText()">
-复制
-</button>
-
-
-<button onclick="formatText()">
-整理
-</button>
-
-
-<button onclick="pasteText()">
-粘贴
-</button>
-
-
-<button onclick="clearText()">
-清空
-</button>
-
-
-
 </div>
-
 
 
 <script>
@@ -187,31 +118,24 @@ placeholder="输入需要朗读的文章"></textarea>
 
 let chunks=[];
 
-let currentIndex=0;
-
-let reading=false;
+let index=0;
 
 let paused=false;
 
-let currentUtterance=null;
+let reading=false;
 
 
 
-// ======================
-// 文本拆分
-// ======================
-
+// 分割文字
 
 function splitText(text){
 
-
-    let sentences =
+    let arr =
     text.match(
         /[^。！？!?；;]+[。！？!?；;]?/g
     );
 
-
-    if(!sentences)
+    if(!arr)
         return [text];
 
 
@@ -220,40 +144,27 @@ function splitText(text){
     let temp="";
 
 
-    sentences.forEach(sentence=>{
-
-
-        sentence=sentence.trim();
-
+    arr.forEach(s=>{
 
         if(
-            temp.length+sentence.length
-            <=160
+            temp.length+s.length<120
         ){
 
-            temp+=sentence;
+            temp+=s;
+
+        }else{
+
+            result.push(temp);
+
+            temp=s;
 
         }
-        else{
-
-
-            if(temp)
-                result.push(temp);
-
-
-            temp=sentence;
-
-
-        }
-
 
     });
 
 
-
     if(temp)
         result.push(temp);
-
 
 
     return result;
@@ -263,11 +174,7 @@ function splitText(text){
 
 
 
-
-// ======================
-// 获取微软中文声音
-// ======================
-
+// 获取Edge中文声音
 
 function getVoice(){
 
@@ -276,15 +183,14 @@ function getVoice(){
     speechSynthesis.getVoices();
 
 
-
     return voices.find(v=>
 
-        v.name.includes("Xiaoxiao")
-        ||
-        v.name.includes("晓晓")
-        ||
-        v.name.includes("Yunxi")
-        ||
+        v.name.includes("Xiaoxiao")||
+
+        v.name.includes("晓晓")||
+
+        v.name.includes("Yunxi")||
+
         v.name.includes("云希")
 
     )
@@ -292,9 +198,7 @@ function getVoice(){
     ||
 
     voices.find(v=>
-
         v.lang==="zh-CN"
-
     );
 
 
@@ -304,42 +208,33 @@ function getVoice(){
 
 
 
-// ======================
-// 开始朗读
-// ======================
-
-
 function startRead(){
 
 
     let text=
-    document.getElementById("editor")
+    document.getElementById("text")
     .value.trim();
-
 
 
     if(!text)
         return;
 
 
-
-    stopRead();
-
+    speechSynthesis.cancel();
 
 
     chunks=
     splitText(text);
 
 
+    index=0;
 
-    currentIndex=0;
-
+    paused=false;
 
     reading=true;
 
 
-    readCurrent();
-
+    readNext();
 
 
 }
@@ -348,12 +243,7 @@ function startRead(){
 
 
 
-// ======================
-// 朗读当前段
-// ======================
-
-
-function readCurrent(){
+function readNext(){
 
 
     if(!reading)
@@ -361,16 +251,14 @@ function readCurrent(){
 
 
 
-    if(currentIndex>=chunks.length){
+    if(index>=chunks.length){
 
 
-        updateStatus(
-            "朗读完成"
-        );
+        document.getElementById("status")
+        .innerHTML="朗读完成";
 
 
         reading=false;
-
 
         return;
 
@@ -378,21 +266,16 @@ function readCurrent(){
 
 
 
-    speechSynthesis.cancel();
-
-
-
-    currentUtterance=
+    let u=
     new SpeechSynthesisUtterance(
-        chunks[currentIndex]
+        chunks[index]
     );
 
 
+    u.lang="zh-CN";
 
-    currentUtterance.lang="zh-CN";
 
-
-    currentUtterance.rate=
+    u.rate=
     Number(
         document.getElementById("rate")
         .value
@@ -403,41 +286,34 @@ function readCurrent(){
     let voice=getVoice();
 
 
-
     if(voice)
-        currentUtterance.voice=voice;
-
-
-
-    updateStatus(
-        "正在朗读 第 "
-        +(currentIndex+1)
-        +" / "
-        +chunks.length
-        +" 段"
-    );
+        u.voice=voice;
 
 
 
 
-    currentUtterance.onend=function(){
+    document.getElementById("status")
+    .innerHTML=
+
+    "正在朗读 "
+    +(index+1)
+    +"/"
+    +chunks.length;
 
 
-        if(!reading)
-            return;
 
 
-        if(!paused){
+    u.onend=function(){
 
 
-            currentIndex++;
+        if(reading && !paused){
 
+            index++;
 
             setTimeout(
-                readCurrent,
+                readNext,
                 100
             );
-
 
         }
 
@@ -446,20 +322,8 @@ function readCurrent(){
 
 
 
+    speechSynthesis.speak(u);
 
-    currentUtterance.onerror=function(){
-
-        updateStatus(
-            "语音任务中断"
-        );
-
-    };
-
-
-
-    speechSynthesis.speak(
-        currentUtterance
-    );
 
 }
 
@@ -467,13 +331,7 @@ function readCurrent(){
 
 
 
-// ======================
-// 暂停继续
-// ======================
-
-
-function pauseResume(){
-
+function pauseRead(){
 
 
     if(!reading)
@@ -484,37 +342,18 @@ function pauseResume(){
     if(paused){
 
 
-
         paused=false;
 
 
-
-        /*
-        如果 Edge 已经释放任务，
-        resume 无效时重新读取当前段
-        */
-
-        if(
-            speechSynthesis.paused
-        ){
-
-            speechSynthesis.resume();
-
-        }
-        else{
-
-            readCurrent();
-
-        }
+        speechSynthesis.resume();
 
 
-
-        updateStatus(
-            "继续朗读"
-        );
+        document.getElementById("status")
+        .innerHTML="继续朗读";
 
 
     }
+
     else{
 
 
@@ -524,16 +363,11 @@ function pauseResume(){
         speechSynthesis.pause();
 
 
-
-        updateStatus(
-            "已暂停 第 "
-            +(currentIndex+1)
-            +" 段"
-        );
+        document.getElementById("status")
+        .innerHTML="已暂停";
 
 
     }
-
 
 
 }
@@ -542,195 +376,23 @@ function pauseResume(){
 
 
 
-// ======================
-// 停止
-// ======================
-
-
 function stopRead(){
-
-
-    speechSynthesis.cancel();
 
 
     reading=false;
 
     paused=false;
 
+    index=0;
 
-    currentUtterance=null;
-
-
-}
+    chunks=[];
 
 
+    speechSynthesis.cancel();
 
-
-
-// ======================
-// 上一段
-// ======================
-
-
-function prevChunk(){
-
-
-    if(chunks.length===0)
-        return;
-
-
-
-    if(currentIndex>0)
-        currentIndex--;
-
-
-
-    reading=true;
-
-    paused=false;
-
-
-    readCurrent();
-
-
-}
-
-
-
-
-
-// ======================
-// 下一段
-// ======================
-
-
-function nextChunk(){
-
-
-    if(chunks.length===0)
-        return;
-
-
-
-    if(
-        currentIndex<
-        chunks.length-1
-    )
-        currentIndex++;
-
-
-
-    reading=true;
-
-    paused=false;
-
-
-    readCurrent();
-
-
-
-}
-
-
-
-
-
-// ======================
-// 工具
-// ======================
-
-
-
-function updateStatus(text){
 
     document.getElementById("status")
-    .innerText=text;
-
-}
-
-
-
-
-function copyText(){
-
-
-    navigator.clipboard.writeText(
-
-        document.getElementById("editor")
-        .value
-
-    );
-
-
-}
-
-
-
-
-async function pasteText(){
-
-
-    try{
-
-
-        let text=
-        await navigator.clipboard.readText();
-
-
-
-        document.getElementById("editor")
-        .value+=text;
-
-
-
-    }
-    catch(e){
-
-        alert(
-            "无法读取剪贴板"
-        );
-
-    }
-
-
-}
-
-
-
-
-
-function formatText(){
-
-
-    let editor=
-    document.getElementById("editor");
-
-
-    editor.value=
-    editor.value.replace(
-        /[\s\u00A0\u3000]+/g,
-        ""
-    );
-
-}
-
-
-
-
-
-function clearText(){
-
-
-    stopRead();
-
-
-    document.getElementById("editor")
-    .value="";
-
-
-    updateStatus(
-        "准备就绪"
-    );
+    .innerHTML="已停止";
 
 
 }
@@ -743,11 +405,6 @@ speechSynthesis.onvoiceschanged=function(){
     speechSynthesis.getVoices();
 
 };
-
-
-
-speechSynthesis.getVoices();
-
 
 
 </script>
